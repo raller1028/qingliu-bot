@@ -1,0 +1,1 @@
+docker build -t raller1028/qingliu-bot:0.2-2022-10-12 .
