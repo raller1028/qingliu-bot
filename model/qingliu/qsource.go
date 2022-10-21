@@ -15,6 +15,7 @@ type QSource struct {
 	Server    string    `json:"server"`
 	Company   string    `json:"company"`
 	Trial     float64   `json:"trial"`
+	Weight    float64   `json:"weight"`
 }
 type Product struct {
 	Name     string  `json:"name"`

@@ -83,7 +83,7 @@ func Get4PXOrderList(cookie string, startDate string, endDate string, page strin
 	//   -H 'x-requested-with: XMLHttpRequest' \
 	//   --data-raw 'pageNum=1&pageSize=20&statusName=INFO_RECEIVED&startDate=2022-09-05%2000%3A00%3A00&endDate=2022-09-19%2023%3A59%3A59&isHistory=N' \
 	//   --compressed
-	bodyStr := "pageNum=" + page + "&pageSize=300&statusName=INFO_RECEIVED&startDate=" + startDate + "%2000%3A00%3A00&endDate=" + endDate + "%2023%3A59%3A59&isHistory=N"
+	bodyStr := "pageNum=" + page + "&pageSize=500&statusName=INFO_RECEIVED&startDate=" + startDate + "%2000%3A00%3A00&endDate=" + endDate + "%2023%3A59%3A59&isHistory=N"
 	//body := strings.NewReader("startDate=2022-09-12%2000%3A00%3A00&endDate=2022-09-26%2023%3A59%3A59&isHistory=N&pageNum=1&pageSize=20&queryOrderNo=XMZX17010943&countryCode=&productCode=&startPrintDate=&endPrintDate=&consigneeName=&subAccountId=&accountType=&startStockInDate=&endStockInDate=&distributorCode=")
 	if len(orderNo) > 0 {
 
@@ -145,7 +145,6 @@ func Get4PXOrderList(cookie string, startDate string, endDate string, page strin
 	if err != nil {
 		return orderList, err
 	}
-
 	err = json.Unmarshal(data, &orderList)
 	if err != nil {
 		fmt.Println(string(data))

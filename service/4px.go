@@ -9,6 +9,7 @@
 package service
 
 import (
+	"context"
 	"crypto/md5"
 	"fmt"
 	"io/ioutil"
@@ -17,6 +18,8 @@ import (
 	"net/url"
 	"qingliuBot/helper"
 	px "qingliuBot/model/4px"
+	"qingliuBot/model/qingliu"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +33,7 @@ type Px4Service interface {
 	GetOrderList(orderNo string, startDate, endDate string) (px.OrderList, error)
 	GetOrderListYesterday() (px.OrderList, error)
 	GetOrderDetail(id string) (px.OrderDetail, error)
+	ImportDataByParam(orderNo string, startDate, endDate string)
 }
 
 type px4Service struct {
@@ -128,6 +132,94 @@ func (p *px4Service) GetOrderListYesterday() (px.OrderList, error) {
 func (p *px4Service) GetOrderDetail(id string) (px.OrderDetail, error) {
 	return helper.GetOrderDetail(PXCOOKIE, id)
 }
+
+func (p *px4Service) ImportDataByParam(orderNo string, startDate, endDate string) {
+
+	// 通过请求http://127.0.0.1:5000 拿到session
+	client := &http.Client{}
+
+	req, _ := http.NewRequest("GET", "http://localhost:5000", nil)
+	resp, _ := client.Do(req)
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	PXCOOKIE = "SESSION=" + string(body)
+	// fmt.Println(PXCOOKIE)
+	var err error
+	var list px.OrderList
+	// fmt.Println("startDate:", startDate)
+	// fmt.Println("orderNo:", orderNo)
+	if startDate == "" && orderNo == "" {
+		list, err = Service.Px4().GetOrderListYesterday()
+		a, b, c := LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "开始推送清流,昨天数据有: "+strconv.Itoa(len(list.List))+" 条")
+		fmt.Println(a, b, c)
+	} else {
+		list, err = Service.Px4().GetOrderList(orderNo, startDate, endDate)
+	}
+
+	if err != nil {
+		a, b, c := LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "获取4px订单失败error: "+err.Error())
+		fmt.Println(a, b, c)
+		return
+	}
+	fmt.Println("list:", list)
+
+	for _, v := range list.List {
+		orderDetail, err := Service.Px4().GetOrderDetail(strconv.FormatInt(v.ID, 10))
+		if err != nil {
+			a, b, c := LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "获取4px订单详情失败error: "+err.Error()+",订单编号:"+strconv.FormatInt(v.ID, 10))
+			fmt.Println(a, b, c)
+			return
+		}
+		data := qingliu.QSource{
+			Order:     orderDetail.Order.CustomerOrderNo,
+			Server:    orderDetail.Order.CoFpxTrackNo,
+			Applicant: "897ce02508e3@lark.qingflow.com",
+			Name:      orderDetail.ShipperConsignee.ConsigneeFirstName + orderDetail.ShipperConsignee.ConsigneeLastName,
+			Phone:     orderDetail.ShipperConsignee.ConsigneeTelephone,
+			Company:   orderDetail.ShipperConsignee.ConsigneeCompany,
+			Country:   orderDetail.ShipperConsignee.ConsigneeCountry,
+			Email:     orderDetail.ShipperConsignee.ConsigneeMail,
+			Province:  orderDetail.ShipperConsignee.ConsigneeProvince,
+			City:      orderDetail.ShipperConsignee.ConsigneeCity,
+			Address:   orderDetail.ShipperConsignee.ConsigneeAddress1 + "," + orderDetail.ShipperConsignee.ConsigneeAddress2,
+			ZipCode:   orderDetail.ShipperConsignee.ConsigneePostcode,
+			Trial:     v.TrialAmount,
+			Weight:    v.CustomerWeight / 1000,
+		}
+		if len(data.Name) == 0 {
+			data.Name = orderDetail.ShipperConsignee.ConsigneeName
+		}
+		products := []qingliu.Product{}
+
+		for _, p := range orderDetail.DeclareList {
+			skuArr := strings.Split(p.Ename, "(")
+			sku := ""
+			if len(skuArr) > 1 {
+				sku = strings.Split(skuArr[1], ")")[0]
+			} else {
+				a, b, c := LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "导入数据出错 截取sku失败,订单号: "+orderDetail.Order.CustomerOrderNo)
+				fmt.Println(a, b, c)
+			}
+			products = append(products, qingliu.Product{
+				Name:     skuArr[0],
+				Num:      p.Pcs,
+				SKU:      sku,
+				Price:    p.UnitPrice,
+				From:     "import",
+				Currency: p.Currency,
+			})
+		}
+		data.Product = products
+		result, statusCode := helper.HttpPostJson(data)
+		if statusCode != 200 {
+			a, b, c := LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "导入数据出错订单: "+orderDetail.Order.CustomerOrderNo+" 失败")
+			fmt.Println(a, b, c)
+		}
+		fmt.Println(result)
+	}
+
+}
+
 func NewPx4Service() Px4Service {
 	return &px4Service{}
 }

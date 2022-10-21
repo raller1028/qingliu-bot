@@ -9,16 +9,13 @@
 package v1
 
 import (
-	"context"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"qingliuBot/helper"
-	"qingliuBot/model/qingliu"
 	"qingliuBot/service"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -41,14 +38,14 @@ func GetSign(w http.ResponseWriter, r *http.Request) {
 	for _, v := range order {
 		str += v + data[v]
 	}
-	fmt.Println("body:", string(body))
+	// fmt.Println("body:", string(body))
 	str += string(body) + appSecret
 	md5Data := []byte(str)
-	fmt.Println("str:", str)
+	// fmt.Println("str:", str)
 	has := md5.Sum(md5Data)
 	md5str1 := fmt.Sprintf("%x", has) //将[]byte转成16进制
 
-	fmt.Println("md5", md5str1)
+	// fmt.Println("md5", md5str1)
 	result := make(map[string]string)
 	result["sign"] = md5str1
 	result["timestamp"] = data["timestamp"]
@@ -82,72 +79,76 @@ func Import(w http.ResponseWriter, r *http.Request) {
 	endDate := r.URL.Query().Get("endDate")
 	// rs := ""
 	order := r.URL.Query().Get("order")
+
 	//fmt.Println(service.Service.Px4().Forward("fu.wms.outbound.getlist", "1.0.0", []byte(`{"create_time_start": 1662964098000,"create_time_end":1663396098000}`)))
 	//fmt.Println(service.Service.Px4().Forward("fu.wms.inbound.getlist", "1.0.0", []byte(`{"create_time_start": 1662964098000,"create_time_end":1663396098000}`)))
-	list, err := service.Service.Px4().GetOrderList(order, startDate, endDate)
-	if err != nil {
-		json.NewEncoder(w).Encode(json.RawMessage(string(`"code": 500, "msg": ` + err.Error() + `}`)))
-		return
-	}
 
-	for _, v := range list.List {
-		orderDetail, err := service.Service.Px4().GetOrderDetail(strconv.FormatInt(v.ID, 10))
-		if err != nil {
-			json.NewEncoder(w).Encode(json.RawMessage(string(`"code": 500, "msg": ` + err.Error() + `}`)))
-			return
-		}
-		data := qingliu.QSource{
-			Order:     orderDetail.Order.CustomerOrderNo,
-			Server:    orderDetail.Order.CoFpxTrackNo,
-			Applicant: "897ce02508e3@lark.qingflow.com",
-			Name:      orderDetail.ShipperConsignee.ConsigneeFirstName + orderDetail.ShipperConsignee.ConsigneeLastName,
-			Phone:     orderDetail.ShipperConsignee.ConsigneeTelephone,
-			Company:   orderDetail.ShipperConsignee.ConsigneeCompany,
-			Country:   orderDetail.ShipperConsignee.ConsigneeCountry,
-			Email:     orderDetail.ShipperConsignee.ConsigneeMail,
-			Province:  orderDetail.ShipperConsignee.ConsigneeProvince,
-			City:      orderDetail.ShipperConsignee.ConsigneeCity,
-			Address:   orderDetail.ShipperConsignee.ConsigneeAddress1 + "," + orderDetail.ShipperConsignee.ConsigneeAddress2,
-			ZipCode:   orderDetail.ShipperConsignee.ConsigneePostcode,
-			Trial:     v.TrialAmount,
-		}
-		if len(data.Name) == 0 {
-			data.Name = orderDetail.ShipperConsignee.ConsigneeName
-		}
-		products := []qingliu.Product{}
-
-		for _, p := range orderDetail.DeclareList {
-			skuArr := strings.Split(p.Ename, "(")
-			sku := ""
-			if len(skuArr) > 1 {
-				sku = strings.Split(skuArr[1], ")")[0]
-			} else {
-				a, b, c := service.LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "导入数据出错 截取sku失败,订单号: "+orderDetail.Order.CustomerOrderNo)
-				fmt.Println(a, b, c)
-			}
-			products = append(products, qingliu.Product{
-				Name:     skuArr[0],
-				Num:      p.Pcs,
-				SKU:      sku,
-				Price:    p.UnitPrice,
-				From:     "import",
-				Currency: p.Currency,
-			})
-		}
-		data.Product = products
-		result, statusCode := helper.HttpPostJson(data)
-		if statusCode != 200 {
-			a, b, c := service.LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "导入数据出错订单: "+orderDetail.Order.CustomerOrderNo+" 失败")
-			fmt.Println(a, b, c)
-		}
-		fmt.Println(result)
-
-		//执行导入操作
-		fmt.Println(orderDetail.ShipperConsignee.ConsigneeFirstName)
-	}
-
-	// json.NewEncoder(w).Encode(json.RawMessage(string(rs)))
+	service.Service.Px4().ImportDataByParam(order, startDate, endDate)
 	json.NewEncoder(w).Encode(json.RawMessage(string(`{"code": 200, "msg": "导入成功"}`)))
+	// list, err := service.Service.Px4().GetOrderList(order, startDate, endDate)
+	// if err != nil {
+	// 	json.NewEncoder(w).Encode(json.RawMessage(string(`"code": 500, "msg": ` + err.Error() + `}`)))
+	// 	return
+	// }
+
+	// for _, v := range list.List {
+	// 	orderDetail, err := service.Service.Px4().GetOrderDetail(strconv.FormatInt(v.ID, 10))
+	// 	if err != nil {
+	// 		json.NewEncoder(w).Encode(json.RawMessage(string(`"code": 500, "msg": ` + err.Error() + `}`)))
+	// 		return
+	// 	}
+	// 	data := qingliu.QSource{
+	// 		Order:     orderDetail.Order.CustomerOrderNo,
+	// 		Server:    orderDetail.Order.CoFpxTrackNo,
+	// 		Applicant: "897ce02508e3@lark.qingflow.com",
+	// 		Name:      orderDetail.ShipperConsignee.ConsigneeFirstName + orderDetail.ShipperConsignee.ConsigneeLastName,
+	// 		Phone:     orderDetail.ShipperConsignee.ConsigneeTelephone,
+	// 		Company:   orderDetail.ShipperConsignee.ConsigneeCompany,
+	// 		Country:   orderDetail.ShipperConsignee.ConsigneeCountry,
+	// 		Email:     orderDetail.ShipperConsignee.ConsigneeMail,
+	// 		Province:  orderDetail.ShipperConsignee.ConsigneeProvince,
+	// 		City:      orderDetail.ShipperConsignee.ConsigneeCity,
+	// 		Address:   orderDetail.ShipperConsignee.ConsigneeAddress1 + "," + orderDetail.ShipperConsignee.ConsigneeAddress2,
+	// 		ZipCode:   orderDetail.ShipperConsignee.ConsigneePostcode,
+	// 		Trial:     v.TrialAmount,
+	// 	}
+	// 	if len(data.Name) == 0 {
+	// 		data.Name = orderDetail.ShipperConsignee.ConsigneeName
+	// 	}
+	// 	products := []qingliu.Product{}
+
+	// 	for _, p := range orderDetail.DeclareList {
+	// 		skuArr := strings.Split(p.Ename, "(")
+	// 		sku := ""
+	// 		if len(skuArr) > 1 {
+	// 			sku = strings.Split(skuArr[1], ")")[0]
+	// 		} else {
+	// 			a, b, c := service.LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "导入数据出错 截取sku失败,订单号: "+orderDetail.Order.CustomerOrderNo)
+	// 			fmt.Println(a, b, c)
+	// 		}
+	// 		products = append(products, qingliu.Product{
+	// 			Name:     skuArr[0],
+	// 			Num:      p.Pcs,
+	// 			SKU:      sku,
+	// 			Price:    p.UnitPrice,
+	// 			From:     "import",
+	// 			Currency: p.Currency,
+	// 		})
+	// 	}
+	// 	data.Product = products
+	// 	result, statusCode := helper.HttpPostJson(data)
+	// 	if statusCode != 200 {
+	// 		a, b, c := service.LarkCli.Message.Send().ToChatID("oc_3b7ab4655bd6de673cf30cce8ce58b19").SendText(context.Background(), "导入数据出错订单: "+orderDetail.Order.CustomerOrderNo+" 失败")
+	// 		fmt.Println(a, b, c)
+	// 	}
+	// 	fmt.Println(result)
+
+	// 	//执行导入操作
+	// 	fmt.Println(orderDetail.ShipperConsignee.ConsigneeFirstName)
+	// }
+
+	// // json.NewEncoder(w).Encode(json.RawMessage(string(rs)))
+	// json.NewEncoder(w).Encode(json.RawMessage(string(`{"code": 200, "msg": "导入成功"}`)))
 }
 
 // 设置4px cookie
